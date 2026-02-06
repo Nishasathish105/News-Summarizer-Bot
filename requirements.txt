@@ -1,0 +1,7 @@
+Flask
+newspaper3k
+deep-translator
+huggingface_hub
+requests
+lxml
+gunicorn

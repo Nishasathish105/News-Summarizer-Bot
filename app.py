@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify
-from newspaper import Article
+from newspaper import Article, Config
 from deep_translator import GoogleTranslator
 from huggingface_hub import InferenceClient
 import os
@@ -20,9 +20,9 @@ def index():
     return render_template("index.html")
 
 
-# 🧠 Summarization function (FIXED for new HF API)
+# 🧠 Summarization function
 def summarize_text(text, max_len, min_len):
-    prompt = f"Summarize the following text in {max_len} words or less: {text}"
+    prompt = f"Summarize the following text in {max_len} words or less:\n{text}"
     response = client.text_generation(
         prompt,
         model="facebook/bart-large-cnn",
@@ -39,20 +39,24 @@ def summarize():
         summary_length = request.form.get("length")
         target_lang = request.form.get("language")
 
-        # Defaults
         full_text = ""
         title = "Custom Text"
         author = "User"
         date = "N/A"
         image = "/static/news.jpg"
 
-        # 🌐 URL input
-        if url:
+        # 🌐 HANDLE URL INPUT
+        if url and url.strip() != "":
             try:
-                article = Article(
-                    url,
-                    browser_user_agent="Mozilla/5.0"
+                config = Config()
+                config.browser_user_agent = (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/120.0.0.0 Safari/537.36"
                 )
+                config.request_timeout = 20
+
+                article = Article(url, config=config)
                 article.download()
                 article.parse()
 
@@ -65,20 +69,22 @@ def summarize():
                         if article.publish_date else "Unknown"
                     )
                     image = article.top_image or image
+
             except Exception as e:
                 print("⚠️ URL parsing failed:", e)
 
-        # ✍️ Text fallback
-        if not full_text:
+        # ✍️ TEXT FALLBACK
+        if not full_text and text:
             full_text = text
 
+        # 🚫 VALIDATION
         if not full_text or len(full_text.split()) < 50:
-            return jsonify({"error": "Please paste at least 50 words."})
+            return jsonify({"error": "Please provide at least 50 words or a valid article URL."})
 
-        # ⏱ Limit text size
+        # ⏱ LIMIT TEXT SIZE (HF token limit protection)
         full_text = " ".join(full_text.split()[:800])
 
-        # 📏 Summary length
+        # 📏 SUMMARY LENGTH
         if summary_length == "short":
             max_len, min_len = 80, 30
         elif summary_length == "long":
@@ -86,23 +92,16 @@ def summarize():
         else:
             max_len, min_len = 130, 50
 
-        # 🧠 Summarize
+        # 🧠 SUMMARIZE
         summary_text = summarize_text(full_text, max_len, min_len)
 
-        # 🌍 Translate
+        # 🌍 TRANSLATE
         if target_lang and target_lang != "en":
-            summary_text = GoogleTranslator(
-                source="auto",
-                target=target_lang
-            ).translate(summary_text)
+            summary_text = GoogleTranslator(source="auto", target=target_lang).translate(summary_text)
 
-        # 🔹 Bullet points
+        # 🔹 BULLET POINTS
         sentences = summary_text.split(". ")
-        bullets = [
-            f"• {s.strip().rstrip('.')}"
-            for s in sentences[:3]
-            if s.strip()
-        ]
+        bullets = [f"• {s.strip().rstrip('.')}" for s in sentences[:3] if s.strip()]
 
         return jsonify({
             "title": title,
@@ -119,3 +118,4 @@ def summarize():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
+

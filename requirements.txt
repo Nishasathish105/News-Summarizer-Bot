@@ -4,4 +4,6 @@ deep-translator
 huggingface_hub
 requests
 lxml
+beautifulsoup4
 gunicorn
+

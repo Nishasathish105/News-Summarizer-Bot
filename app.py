@@ -1,20 +1,20 @@
 from flask import Flask, render_template, request, jsonify
-from newspaper import Article, Config
 from deep_translator import GoogleTranslator
-from huggingface_hub import InferenceClient
-import os
 import requests
-from bs4 import BeautifulSoup
+import os
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
 
-# 🔑 Hugging Face API Token
+# HuggingFace token
 HF_TOKEN = os.environ.get("HF_API_TOKEN")
 
-if not HF_TOKEN:
-    print("❌ ERROR: Hugging Face API Token not found")
+# NEW ENDPOINT (UPDATED)
+HF_API_URL = "https://router.huggingface.co/hf-inference/models/facebook/bart-large-cnn"
 
-client = InferenceClient(token=HF_TOKEN)
+HEADERS = {
+    "Authorization": f"Bearer {HF_TOKEN}",
+    "Content-Type": "application/json"
+}
 
 
 @app.route("/")
@@ -22,88 +22,69 @@ def index():
     return render_template("index.html")
 
 
-# 🧠 Summarization function
+# ---------- SUMMARIZE ----------
 def summarize_text(text, max_len):
-    prompt = f"Summarize the following news article in {max_len} words:\n{text}"
-    response = client.text_generation(
-        prompt,
-        model="facebook/bart-large-cnn",
-        max_new_tokens=max_len
-    )
-    return response.generated_text
+
+    payload = {
+        "inputs": text,
+        "parameters": {
+            "max_new_tokens": max_len,
+            "min_new_tokens": 40
+        }
+    }
+
+    response = requests.post(HF_API_URL, headers=HEADERS, json=payload, timeout=60)
+    result = response.json()
+
+    if isinstance(result, dict) and result.get("error"):
+        raise Exception(result["error"])
+
+    return result[0]["summary_text"]
 
 
+# ---------- MAIN ROUTE ----------
 @app.route("/summarize", methods=["POST"])
 def summarize():
     try:
-        url = request.form.get("url")
-        text = request.form.get("text")
-        summary_length = request.form.get("length")
-        target_lang = request.form.get("language")
+        data = request.get_json(silent=True)
+
+        if data:
+            url = data.get("url")
+            text = data.get("text")
+            target_lang = data.get("language")
+            summary_length = data.get("length")
+        else:
+            url = request.form.get("url")
+            text = request.form.get("text")
+            target_lang = request.form.get("language")
+            summary_length = request.form.get("length")
 
         full_text = ""
-        title = "Custom Text"
-        author = "User"
-        date = "N/A"
-        image = "/static/news.jpg"
+        title = "News Article"
 
-        # 🌐 HANDLE URL INPUT
-        if url and url.strip() != "":
+        # UNIVERSAL ARTICLE READER
+        if url and url.strip():
             try:
-                # ---- Try newspaper3k first ----
-                config = Config()
-                config.browser_user_agent = "Mozilla/5.0"
-                config.request_timeout = 20
+                reader_url = "https://r.jina.ai/" + url
+                response = requests.get(reader_url, timeout=20)
+                full_text = response.text
 
-                article = Article(url, config=config)
-                article.download()
-                article.parse()
+                first_line = full_text.split("\n")[0]
+                if len(first_line) < 150:
+                    title = first_line.strip()
 
-                if article.text and len(article.text.split()) > 50:
-                    full_text = article.text
-                    title = article.title or "News Article"
-                    author = ", ".join(article.authors) if article.authors else "Unknown"
-                    date = article.publish_date.strftime("%B %d, %Y") if article.publish_date else "Unknown"
-                    image = article.top_image or image
+            except Exception as e:
+                print("Reader failed:", e)
 
-            except:
-                pass
-
-            # ---- FALLBACK SCRAPER (for blocked sites) ----
-            if not full_text:
-                try:
-                    headers = {
-                        "User-Agent": "Mozilla/5.0",
-                        "Accept-Language": "en-US,en;q=0.9"
-                    }
-
-                    r = requests.get(url, headers=headers, timeout=15)
-                    soup = BeautifulSoup(r.text, "html.parser")
-
-                    paragraphs = soup.find_all("p")
-                    article_text = " ".join(p.get_text() for p in paragraphs)
-
-                    if len(article_text.split()) > 50:
-                        full_text = article_text
-                        title_tag = soup.find("title")
-                        if title_tag:
-                            title = title_tag.get_text()
-
-                except Exception as e:
-                    print("Fallback scraper failed:", e)
-
-        # ✍️ TEXT INPUT FALLBACK
         if not full_text and text:
             full_text = text
 
-        # 🚫 VALIDATION
         if not full_text or len(full_text.split()) < 50:
-            return jsonify({"error": "Please provide at least 50 words or a valid article URL."})
+            return jsonify({"error": "Could not extract article text."})
 
-        # ⏱ Limit size (HF free tier safety)
-        full_text = " ".join(full_text.split()[:800])
+        full_text = " ".join(full_text.split()[:900])
 
-        # 📏 SUMMARY LENGTH
+        # summary size
         if summary_length == "short":
             max_len = 80
         elif summary_length == "long":
@@ -111,31 +92,25 @@ def summarize():
         else:
             max_len = 130
 
-        # 🧠 SUMMARIZE
-        summary_text = summarize_text(full_text, max_len)
+        summary = summarize_text(full_text, max_len)
 
-        # 🌍 TRANSLATE
         if target_lang and target_lang != "en":
-            summary_text = GoogleTranslator(source="auto", target=target_lang).translate(summary_text)
+            summary = GoogleTranslator(source="auto", target=target_lang).translate(summary)
 
-        # 🔹 BULLET POINTS
-        sentences = summary_text.split(". ")
-        bullets = [f"• {s.strip().rstrip('.')}" for s in sentences[:3] if s.strip()]
+        bullets = [f"• {s.strip()}" for s in summary.split(". ")[:3] if s.strip()]
 
         return jsonify({
             "title": title,
-            "author": author,
-            "date": date,
-            "image": image,
+            "author": "Unknown",
+            "date": "N/A",
+            "image": "/static/news.jpg",
             "summary": "<br>".join(bullets)
         })
 
     except Exception as e:
-        print("❌ ERROR:", e)
+        print("SERVER ERROR:", e)
         return jsonify({"error": str(e)})
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
-
-
+    app.run(debug=True)

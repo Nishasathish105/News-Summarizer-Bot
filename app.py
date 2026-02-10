@@ -2,13 +2,14 @@ from flask import Flask, render_template, request, jsonify
 from deep_translator import GoogleTranslator
 import requests
 import os
+import re
+import trafilatura
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
 
 # HuggingFace token
 HF_TOKEN = os.environ.get("HF_API_TOKEN")
 
-# NEW ENDPOINT (UPDATED)
 HF_API_URL = "https://router.huggingface.co/hf-inference/models/facebook/bart-large-cnn"
 
 HEADERS = {
@@ -24,7 +25,6 @@ def index():
 
 # ---------- SUMMARIZE ----------
 def summarize_text(text, max_len):
-
     payload = {
         "inputs": text,
         "parameters": {
@@ -40,6 +40,43 @@ def summarize_text(text, max_len):
         raise Exception(result["error"])
 
     return result[0]["summary_text"]
+
+
+# ---------- ARTICLE EXTRACTOR ----------
+def extract_article(url):
+    try:
+        # follow redirects (Google News / MSN etc)
+        r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, allow_redirects=True, timeout=10)
+        final_url = r.url
+
+        downloaded = trafilatura.fetch_url(final_url)
+        text = trafilatura.extract(downloaded, include_comments=False, include_tables=False)
+
+        return text if text else "", final_url
+    except:
+        return "", url
+
+
+# ---------- IMAGE EXTRACTOR ----------
+def extract_image(url):
+    try:
+        html = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10).text
+
+        patterns = [
+            r'<meta property="og:image" content="(.*?)"',
+            r'<meta name="twitter:image" content="(.*?)"',
+            r'"thumbnailUrl":"(.*?)"'
+        ]
+
+        for p in patterns:
+            m = re.search(p, html)
+            if m:
+                return m.group(1)
+
+    except:
+        pass
+
+    return "/static/news.jpg"
 
 
 # ---------- MAIN ROUTE ----------
@@ -61,21 +98,18 @@ def summarize():
 
         full_text = ""
         title = "News Article"
+        image = "/static/news.jpg"
 
-        # UNIVERSAL ARTICLE READER
+        # ---- REAL ARTICLE EXTRACTION ----
         if url and url.strip():
-            try:
-                reader_url = "https://r.jina.ai/" + url
-                response = requests.get(reader_url, timeout=20)
-                full_text = response.text
+            article_text, real_url = extract_article(url)
 
-                first_line = full_text.split("\n")[0]
-                if len(first_line) < 150:
-                    title = first_line.strip()
+            if article_text:
+                full_text = article_text
+                title = article_text.split(".")[0][:120]
+                image = extract_image(real_url)
 
-            except Exception as e:
-                print("Reader failed:", e)
-
+        # manual text fallback
         if not full_text and text:
             full_text = text
 
@@ -103,7 +137,7 @@ def summarize():
             "title": title,
             "author": "Unknown",
             "date": "N/A",
-            "image": "/static/news.jpg",
+            "image": image,
             "summary": "<br>".join(bullets)
         })
 

@@ -2,3 +2,4 @@ Flask
 deep-translator
 requests
 gunicorn
+trafilatura

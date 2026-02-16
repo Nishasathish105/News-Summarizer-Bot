@@ -1,14 +1,25 @@
 from flask import Flask, render_template, request, jsonify
 from newspaper import Article
 from deep_translator import GoogleTranslator
-from transformers import pipeline
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, pipeline
 import trafilatura
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
 
-# Load HuggingFace model locally
+# ---------------- LOAD LIGHTWEIGHT MODEL (RENDER SAFE) ----------------
 print("Loading AI model... first time takes 2-5 minutes")
-summarizer = pipeline("summarization", model="sshleifer/distilbart-cnn-12-6")
+
+model_name = "sshleifer/distilbart-cnn-12-6"
+
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
+
+summarizer = pipeline(
+    task="text2text-generation",
+    model=model,
+    tokenizer=tokenizer
+)
+
 print("Model ready!")
 
 
@@ -43,7 +54,7 @@ def extract_article_text(url):
     except:
         pass
 
-    # fallback extraction (for blocked sites like MSN)
+    # fallback extraction for blocked sites
     if not text or len(text.split()) < 50:
         downloaded = trafilatura.fetch_url(url)
         if downloaded:
@@ -56,8 +67,13 @@ def extract_article_text(url):
 
 # -------- SUMMARIZATION --------
 def summarize_text(text):
-    result = summarizer(text[:1200], max_length=150, min_length=50, do_sample=False)
-    return result[0]["summary_text"]
+    result = summarizer(
+        text[:1200],
+        max_length=150,
+        min_length=50,
+        do_sample=False
+    )
+    return result[0]["generated_text"]
 
 
 @app.route("/summarize", methods=["POST"])
@@ -81,7 +97,7 @@ def summarize():
         if url:
             full_text, title, author, date, image = extract_article_text(url)
 
-        # text mode
+        # Text mode
         if not full_text:
             full_text = text
 
@@ -90,6 +106,7 @@ def summarize():
 
         summary = summarize_text(full_text)
 
+        # translate if needed
         if language != "en":
             summary = GoogleTranslator(source="auto", target=language).translate(summary)
 

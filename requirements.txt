@@ -1,9 +1,9 @@
-Flask
-deep-translator
-requests
-beautifulsoup4
+flask
 gunicorn
-trafilatura
 newspaper3k
-huggingface-hub
+deep-translator
+trafilatura
+transformers
+torch
+sentencepiece
 lxml_html_clean

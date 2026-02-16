@@ -1,21 +1,15 @@
 from flask import Flask, render_template, request, jsonify
+from newspaper import Article
 from deep_translator import GoogleTranslator
-import requests
-import os
-import re
+from transformers import pipeline
 import trafilatura
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
 
-# HuggingFace token
-HF_TOKEN = os.environ.get("HF_API_TOKEN")
-
-HF_API_URL = "https://router.huggingface.co/hf-inference/models/facebook/bart-large-cnn"
-
-HEADERS = {
-    "Authorization": f"Bearer {HF_TOKEN}",
-    "Content-Type": "application/json"
-}
+# Load HuggingFace model locally
+print("Loading AI model... first time takes 2-5 minutes")
+summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
+print("Model ready!")
 
 
 @app.route("/")
@@ -23,126 +17,94 @@ def index():
     return render_template("index.html")
 
 
-# ---------- SUMMARIZE ----------
-def summarize_text(text, max_len):
-    payload = {
-        "inputs": text,
-        "parameters": {
-            "max_new_tokens": max_len,
-            "min_new_tokens": 40
-        }
-    }
+# -------- ARTICLE EXTRACTION WITH METADATA --------
+def extract_article_text(url):
+    text = ""
+    title = "News Summary"
+    author = "Unknown"
+    date = "N/A"
+    image = "/static/news.jpg"
 
-    response = requests.post(HF_API_URL, headers=HEADERS, json=payload, timeout=60)
-    result = response.json()
-
-    if isinstance(result, dict) and result.get("error"):
-        raise Exception(result["error"])
-
-    return result[0]["summary_text"]
-
-
-# ---------- ARTICLE EXTRACTOR ----------
-def extract_article(url):
     try:
-        # follow redirects (Google News / MSN etc)
-        r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, allow_redirects=True, timeout=10)
-        final_url = r.url
+        article = Article(url)
+        article.download()
+        article.parse()
 
-        downloaded = trafilatura.fetch_url(final_url)
-        text = trafilatura.extract(downloaded, include_comments=False, include_tables=False)
+        text = article.text
+        title = article.title or title
+        author = ", ".join(article.authors) if article.authors else author
 
-        return text if text else "", final_url
-    except:
-        return "", url
+        if article.publish_date:
+            date = article.publish_date.strftime("%B %d, %Y")
 
-
-# ---------- IMAGE EXTRACTOR ----------
-def extract_image(url):
-    try:
-        html = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10).text
-
-        patterns = [
-            r'<meta property="og:image" content="(.*?)"',
-            r'<meta name="twitter:image" content="(.*?)"',
-            r'"thumbnailUrl":"(.*?)"'
-        ]
-
-        for p in patterns:
-            m = re.search(p, html)
-            if m:
-                return m.group(1)
+        if article.top_image:
+            image = article.top_image
 
     except:
         pass
 
-    return "/static/news.jpg"
+    # fallback extraction (for blocked sites like MSN)
+    if not text or len(text.split()) < 50:
+        downloaded = trafilatura.fetch_url(url)
+        if downloaded:
+            extracted = trafilatura.extract(downloaded)
+            if extracted:
+                text = extracted
+
+    return text, title, author, date, image
 
 
-# ---------- MAIN ROUTE ----------
+# -------- SUMMARIZATION --------
+def summarize_text(text):
+    result = summarizer(text[:1200], max_length=150, min_length=50, do_sample=False)
+    return result[0]["summary_text"]
+
+
 @app.route("/summarize", methods=["POST"])
 def summarize():
     try:
-        data = request.get_json(silent=True)
+        data = request.get_json()
 
-        if data:
-            url = data.get("url")
-            text = data.get("text")
-            target_lang = data.get("language")
-            summary_length = data.get("length")
-        else:
-            url = request.form.get("url")
-            text = request.form.get("text")
-            target_lang = request.form.get("language")
-            summary_length = request.form.get("length")
+        url = data.get("url", "")
+        text = data.get("text", "")
+        language = data.get("language", "en")
 
-        full_text = ""
-        title = "News Article"
+        # default values
+        title = "News Summary"
+        author = "Unknown"
+        date = "N/A"
         image = "/static/news.jpg"
 
-        # ---- REAL ARTICLE EXTRACTION ----
-        if url and url.strip():
-            article_text, real_url = extract_article(url)
+        full_text = ""
 
-            if article_text:
-                full_text = article_text
-                title = article_text.split(".")[0][:120]
-                image = extract_image(real_url)
+        # URL mode
+        if url:
+            full_text, title, author, date, image = extract_article_text(url)
 
-        # manual text fallback
-        if not full_text and text:
+        # text mode
+        if not full_text:
             full_text = text
 
         if not full_text or len(full_text.split()) < 50:
-            return jsonify({"error": "Could not extract article text."})
+            return jsonify({"error": "Please provide at least 50 words."})
 
-        full_text = " ".join(full_text.split()[:900])
+        summary = summarize_text(full_text)
 
-        # summary size
-        if summary_length == "short":
-            max_len = 80
-        elif summary_length == "long":
-            max_len = 200
-        else:
-            max_len = 130
+        if language != "en":
+            summary = GoogleTranslator(source="auto", target=language).translate(summary)
 
-        summary = summarize_text(full_text, max_len)
-
-        if target_lang and target_lang != "en":
-            summary = GoogleTranslator(source="auto", target=target_lang).translate(summary)
-
-        bullets = [f"• {s.strip()}" for s in summary.split(". ")[:3] if s.strip()]
+        bullets = [s.strip() for s in summary.split(". ")[:3]]
 
         return jsonify({
             "title": title,
-            "author": "Unknown",
-            "date": "N/A",
+            "author": author,
+            "date": date,
             "image": image,
-            "summary": "<br>".join(bullets)
+            "summary": bullets
         })
 
     except Exception as e:
-        print("SERVER ERROR:", e)
+        print("ERROR:", e)
         return jsonify({"error": str(e)})
 
 

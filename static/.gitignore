@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.env
+venv/
+.env/
+chilli/
+instance/
+*.sqlite3
+model/
+*.pt
+*.bin

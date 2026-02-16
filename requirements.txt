@@ -1,5 +1,9 @@
 Flask
 deep-translator
 requests
+beautifulsoup4
 gunicorn
 trafilatura
+newspaper3k
+huggingface-hub
+lxml_html_clean

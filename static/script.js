@@ -1,6 +1,6 @@
-// ------------------ FORM SUBMIT ------------------
 let lastArticleURL = "";
 
+/* ---------------- SUBMIT FORM ---------------- */
 document.getElementById("summarizeForm").addEventListener("submit", async function(e) {
   e.preventDefault();
 
@@ -9,8 +9,8 @@ document.getElementById("summarizeForm").addEventListener("submit", async functi
   const summaryContainer = document.getElementById("articleSummary");
   const readButton = document.getElementById("readAloud");
 
-  result.classList.add("hidden");
   loading.classList.remove("hidden");
+  result.classList.add("hidden");
 
   const payload = {
     url: document.getElementById("url").value,
@@ -24,7 +24,7 @@ document.getElementById("summarizeForm").addEventListener("submit", async functi
   try {
     const response = await fetch("/summarize", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {"Content-Type": "application/json"},
       body: JSON.stringify(payload)
     });
 
@@ -36,8 +36,8 @@ document.getElementById("summarizeForm").addEventListener("submit", async functi
       return;
     }
 
-    readButton.classList.remove("hidden");
     result.classList.remove("hidden");
+    readButton.classList.remove("hidden");
 
     document.getElementById("articleTitle").textContent = data.title;
     document.getElementById("articleAuthor").textContent = data.author;
@@ -45,13 +45,13 @@ document.getElementById("summarizeForm").addEventListener("submit", async functi
     document.getElementById("articleImage").src = data.image;
 
     summaryContainer.innerHTML = "";
-    data.summary.split("<br>").forEach(line => {
+    data.summary.forEach(line => {
       const li = document.createElement("li");
       li.textContent = line;
       summaryContainer.appendChild(li);
     });
 
-  } catch (err) {
+  } catch(err) {
     loading.classList.add("hidden");
     alert("Server error");
     console.error(err);
@@ -59,37 +59,14 @@ document.getElementById("summarizeForm").addEventListener("submit", async functi
 });
 
 
-// ------------------ OPEN ORIGINAL ARTICLE ------------------
-document.getElementById("openArticle").addEventListener("click", () => {
-  if (lastArticleURL && lastArticleURL.trim() !== "") {
-    window.open(lastArticleURL, "_blank");
-  } else {
-    alert("No article URL available.");
-  }
-});
-
-
-// ------------------ DARK MODE ------------------
-const modeToggle = document.getElementById("modeToggle");
-
-modeToggle.addEventListener("click", () => {
-  document.body.classList.toggle("dark-mode");
-
-  if (document.body.classList.contains("dark-mode")) {
-    modeToggle.textContent = "☀ Light Mode";
-  } else {
-    modeToggle.textContent = "🌙 Dark Mode";
-  }
-});
-
-
-// ------------------ TEXT TO SPEECH ------------------
+/* ---------------- READ ALOUD ---------------- */
 const readButton = document.getElementById("readAloud");
 let speaking = false;
 
 readButton.addEventListener("click", () => {
+
   const text = document.getElementById("articleSummary").innerText;
-  if (!text.trim()) return alert("No summary to read");
+  if (!text.trim()) return alert("No summary available");
 
   if (speaking) {
     speechSynthesis.cancel();
@@ -112,15 +89,45 @@ readButton.addEventListener("click", () => {
 });
 
 
-// ------------------ SPEECH TO TEXT ------------------
+/* ---------------- COPY SUMMARY ---------------- */
+document.getElementById("copySummary").addEventListener("click", () => {
+  const text = document.getElementById("articleSummary").innerText;
+
+  if (!text.trim()) {
+    alert("No summary to copy");
+    return;
+  }
+
+  navigator.clipboard.writeText(text);
+  alert("Summary copied!");
+});
+
+
+/* ---------------- OPEN ARTICLE ---------------- */
+document.getElementById("openArticle").addEventListener("click", () => {
+  if (!lastArticleURL || lastArticleURL.trim() === "") {
+    alert("No article URL available.");
+    return;
+  }
+
+  window.open(lastArticleURL, "_blank");
+});
+
+
+/* ---------------- DARK MODE ---------------- */
+document.getElementById("modeToggle").addEventListener("click", () => {
+  document.body.classList.toggle("light-mode");
+});
+
+
+/* ---------------- SPEECH TO TEXT (MIC) ---------------- */
 const micBtn = document.getElementById("micBtn");
 const textArea = document.getElementById("text");
 
-let recognition;
-
 if ("webkitSpeechRecognition" in window || "SpeechRecognition" in window) {
+
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  recognition = new SpeechRecognition();
+  const recognition = new SpeechRecognition();
 
   recognition.lang = "en-IN";
   recognition.continuous = false;
@@ -128,7 +135,7 @@ if ("webkitSpeechRecognition" in window || "SpeechRecognition" in window) {
 
   micBtn.addEventListener("click", () => {
     recognition.start();
-    micBtn.textContent = "🎤 Listening...";
+    micBtn.textContent = "🎤...";
   });
 
   recognition.onresult = (event) => {
@@ -139,7 +146,7 @@ if ("webkitSpeechRecognition" in window || "SpeechRecognition" in window) {
 
   recognition.onerror = () => {
     micBtn.textContent = "🎙️";
-    alert("Microphone permission denied or not supported.");
+    alert("Microphone permission denied");
   };
 
   recognition.onend = () => {

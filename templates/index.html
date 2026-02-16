@@ -1,64 +1,71 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>AI News Summarizer</title>
-  <link rel="stylesheet" href="/static/style.css">
+<meta charset="UTF-8">
+<title>AI News Summarizer</title>
+<link rel="stylesheet" href="/static/style.css">
 </head>
+
 <body>
-  <div class="container">
-    <h1>📰 AI News Summarizer Bot</h1>
-    <p class="subtitle">Summarize, translate & understand news smarter!</p>
+<div class="container">
 
-    <form id="summarizeForm">
-      <input type="text" name="url" id="url" placeholder="Paste News Article URL (optional)">
+<h1>📰 AI News Summarizer Bot</h1>
+<p class="subtitle">Summarize, translate & understand news smarter!</p>
 
-      <!-- ✍️ Text input with mic -->
-      <div class="text-with-mic">
-        <textarea name="text" id="text" placeholder="Or paste article text here..."></textarea>
+<form id="summarizeForm">
+
+    <!-- URL -->
+    <input id="url" type="text" placeholder="Paste news URL here">
+
+    <!-- TEXT + MIC -->
+    <div class="text-with-mic">
+        <textarea id="text" rows="6" placeholder="Or paste article text here..."></textarea>
         <button type="button" id="micBtn" class="mic-btn">🎙️</button>
-      </div>
+    </div>
 
-      <!-- 🌍 Language Translate -->
-      <label for="language">Translate Summary To:</label>
-      <select id="language" name="language">
+    <!-- LANGUAGE -->
+    <label for="language">Translate Summary To:</label>
+    <select id="language">
         <option value="en">English</option>
+        <option value="ta">Tamil</option>
         <option value="hi">Hindi</option>
         <option value="kn">Kannada</option>
-        <option value="ta">Tamil</option>
         <option value="te">Telugu</option>
         <option value="ml">Malayalam</option>
-      </select>
+    </select>
 
-      <button type="submit">Summarize</button>
-    </form>
+    <button type="submit">Summarize</button>
+</form>
 
-    <div id="loading" class="hidden">
-      <div class="spinner"></div>
-      <p>Extracting and summarizing... please wait</p>
-    </div>
+<!-- LOADING -->
+<div id="loading" class="hidden">
+    <div class="spinner"></div>
+    <p>Extracting and summarizing... please wait</p>
+</div>
 
-    <div id="result" class="hidden">
-      <h2 id="articleTitle"></h2>
-      <p class="details">By <span id="articleAuthor"></span> | <span id="articleDate"></span></p>
-      <img id="articleImage" src="" alt="">
-      <h3>🧠 Summary</h3>
-      <ul id="articleSummary" class="summary-text"></ul>
+<!-- RESULT -->
+<div id="result" class="hidden">
 
-      <!-- 🎧 Read Aloud Button -->
-      <button id="readAloud" class="read-btn hidden">🔊 Read Aloud</button>
+    <h2 id="articleTitle"></h2>
+    <p class="details">By <span id="articleAuthor"></span> | <span id="articleDate"></span></p>
 
-      <!-- 📋 Copy Summary Button -->
-      <button id="copySummary" class="read-btn">📋 Copy Summary</button>
+    <img id="articleImage" src="" alt="">
 
-      <!-- 🌐 Open Original Article Button -->
-      <button id="openArticle" class="read-btn">🌐 Open Original Article</button>
-    </div>
-  </div>
+    <h3>🧠 Summary</h3>
+    <ul id="articleSummary" class="summary-text"></ul>
 
-  <!-- 🌗 Light/Dark Mode Toggle -->
-  <button id="modeToggle" class="mode-btn">🌙 Dark Mode</button>
+    <!-- BUTTONS -->
+    <button id="readAloud" class="read-btn hidden">🔊 Read Aloud</button>
+    <button id="copySummary" class="read-btn">📋 Copy Summary</button>
+    <button id="openArticle" class="read-btn">🌐 Open Original Article</button>
 
-  <script src="/static/script.js"></script>
+</div>
+
+</div>
+
+<!-- DARK MODE -->
+<button id="modeToggle" class="mode-btn">🌙 Dark Mode</button>
+
+<script src="/static/script.js"></script>
 </body>
 </html>

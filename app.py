@@ -8,7 +8,7 @@ app = Flask(__name__, static_folder="static", template_folder="templates")
 
 # Load HuggingFace model locally
 print("Loading AI model... first time takes 2-5 minutes")
-summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
+summarizer = pipeline("summarization", model="sshleifer/distilbart-cnn-12-6")
 print("Model ready!")
 
 
